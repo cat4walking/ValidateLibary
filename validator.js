@@ -1,22 +1,40 @@
 let validator = (options) => {
+    let getParent = (element, selector) => {
+        while (element.parentElement) {
+            if (element.parentElement.matches(selector)) {
+                return element.parentElement;
+            }
+            element = element.parentElement;
+        }
+    }
     let selectorRules = {};
     // hàm thực hiện validate
     let validate = (inputElement, rule) => {
             let errorMessage;
-            let errorElement = inputElement.parentElement.querySelector('.form-message');
+            let errorElement = getParent(inputElement, options.formGroupSelector).querySelector(options.errorSelector);
             // lấy ra các rule của selector  
             let rules = selectorRules[rule.selector];
             // lặp qua từng rule
             for (let i = 0; i < rules.length; ++i) {
-                errorMessage = rules[i](inputElement.value);
+                switch (inputElement.type) {
+                    case 'checkbox':
+                    case 'radio':
+                        errorMessage = rules[i](
+                            formElement.querySelector(rule.selector + ':checked')
+                        );
+                        break;
+                    default:
+                        errorMessage = rules[i](inputElement.value);
+                }
+
                 if (errorMessage) break;
             };
             if (errorMessage) {
                 errorElement.innerText = errorMessage;
-                inputElement.parentElement.classList.add('invalid');
+                getParent(inputElement, options.formGroupSelector).classList.add('invalid');
             } else {
                 errorElement.innerText = '';
-                inputElement.parentElement.classList.remove('invalid');
+                getParent(inputElement, options.formGroupSelector).classList.remove('invalid');
             }
 
             return !errorMessage;
@@ -38,9 +56,31 @@ let validator = (options) => {
 
             if (isFormValid) {
                 if (typeof options.onSubmit === 'function') {
-                    let enableInput = formElement.querySelectorAll('[name]:not([disabled])');
+                    let enableInput = formElement.querySelectorAll('[name]');
                     let formValue = Array.from(enableInput).reduce((value, input) => {
-                        return (value[input.name] = input.value) && value;
+
+                        switch (input.type) {
+                            case 'radio':
+                                if (input.matches(':checked'))
+                                    value[input.name] = input.value
+                                break;
+                            case 'checkbox':
+                                if (!input.matches(':checked')) {
+                                    values[input.name] = '';
+                                    return values;
+                                }
+                                if (!Array.isArray(values[input.name])) {
+                                    values[input.name] = [];
+                                }
+                                values[input.name].push(input.value);
+                                break;
+                            case 'file':
+                                values[input.name] = input.files;
+                                break;
+                            default:
+                                value[input.name] = '';
+                        }
+                        return value;
                     }, {});
                     options.onSubmit(formValue);
                 } else {
@@ -58,22 +98,20 @@ let validator = (options) => {
                 selectorRules[rule.selector] = [rule.test];
             }
 
-            let inputElement = formElement.querySelector(rule.selector);
-            if (inputElement) {
+            let inputElements = formElement.querySelectorAll(rule.selector);
+            Array.from(inputElements).forEach(inputElement => {
                 inputElement.onblur = () => {
-                    validate(inputElement, rule);
+                        validate(inputElement, rule);
+                    }
+                    // xử lý mỗi khi người dùng nhập
+                inputElement.oninput = () => {
+                    let errorElement = getParent(inputElement, options.formGroupSelector).querySelector(options.errorSelector);
+                    errorElement.innerText = '';
+                    getParent(inputElement, options.formGroupSelector).classList.remove('invalid');
                 }
-            };
-            // xử lý mỗi khi người dùng nhập
-            inputElement.oninput = () => {
-                let errorElement = inputElement.parentElement.querySelector(options.errorSelector);
-                errorElement.innerText = '';
-                inputElement.parentElement.classList.remove('invalid');
-            }
+            })
         });
-
     }
-
 };
 
 // định nghĩa rules
@@ -84,7 +122,7 @@ validator.isRequired = (selector, message) => {
     return {
         selector: selector,
         test: (value) => {
-            return value.trim() ? undefined : message || 'Vui lòng nhập trường này'
+            return value ? undefined : message || 'Vui lòng nhập trường này'
         }
     };
 };
